@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>TB303 XtRM</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+            text-align: center;
+            margin: 40px;
+        }
+
+        button {
+            padding: 10px 16px;
+            margin: 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .waveform {
+            margin-top: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 30px;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control label {
+            width: 120px;
+            text-align: left;
+        }
+
+        input[type=range] {
+            flex: 1;
+            accent-color: #555; /* dark grey fill for modern browsers */
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            background: #555;
+            height: 6px;
+            border-radius: 3px;
+        }
+
+        input[type=range]::-moz-range-track {
+            background: #555;
+            height: 6px;
+            border-radius: 3px;
+        }
+
+        input[type=range]::-ms-track {
+            background: #555;
+            height: 6px;
+            border-radius: 3px;
+        }
+
+        input[type=number] {
+            width: 60px;
+            background: #222;
+            color: #eee;
+            border: 1px solid #555;
+            border-radius: 4px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>TB303 XtRM</h1>
+
+    <button id="startBtn">Start</button>
+    <button id="stopBtn">Stop</button>
+    <button id="randomBtn">Randomize Pattern</button>
+
+    <div class="waveform">
+        <label>
+            <input type="radio" name="wave" value="sawtooth" checked> Saw
+        </label>
+        <label>
+            <input type="radio" name="wave" value="square"> Square
+        </label>
+    </div>
+
+    <div class="controls">
+        <div class="control">
+            <label for="tune">Tune</label>
+            <input type="range" id="tune" min="-3600" max="3600" value="0">
+            <input type="number" id="tuneNum" value="0">
+        </div>
+
+        <div class="control">
+            <label for="attack">Attack</label>
+            <input type="range" id="attack" min="0.000" max="1" step="0.001" value="0.002">
+            <input type="number" id="attackNum" value="0.002">
+        </div>
+
+        <div class="control">
+            <label for="cutoff">Cutoff</label>
+            <input type="range" id="cutoff" min="-1500" max="8000" value="800">
+            <input type="number" id="cutoffNum" value="800">
+        </div>
+
+        <div class="control">
+            <label for="resonance">Resonance</label>
+            <input type="range" id="resonance" min="-4" max="80" step="0.1" value="8">
+            <input type="number" id="resonanceNum" value="8">
+        </div>
+
+        <div class="control">
+            <label for="envMod">Env Mod</label>
+            <input type="range" id="envMod" min="-1000" max="8000" value="2000">
+            <input type="number" id="envModNum" value="2000">
+        </div>
+
+        <div class="control">
+            <label for="decay">Decay</label>
+            <input type="range" id="decay" min="-2" max="2" step="0.01" value="0.2">
+            <input type="number" id="decayNum" value="0.2">
+        </div>
+
+        <div class="control">
+            <label for="accent">Accent Amount</label>
+            <input type="range" id="accent" min="-10" max="10" step="0.01" value="0.4">
+            <input type="number" id="accentNum" value="0.4">
+        </div>
+    </div>
+    <div style="margin-top:50px">
+        <a href="https://github.com/damiencorpataux/tb303">github</a>
+    </div>
+
+    <script src="tb303.js"></script>
+    <script>
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const tb = new TB303(ctx);
+
+        const BPM = 120;
+        const STEP_TIME = (60 / BPM) / 4;
+
+        let pattern = [];
+        let stepIndex = 0;
+        let intervalID = null;
+
+        function randomize() {
+            pattern = [];
+            for (let i = 0; i < 16; i++) {
+                if (Math.random() < 0.25) {
+                    pattern.push(null);
+                    continue;
+                }
+                const base = 36;
+                const note = base + Math.floor(Math.random() * 12);
+                const accent = Math.random() > 0.6;
+                const slide = Math.random() > 0.7;
+                pattern.push({ note, accent, slide });
+            }
+            console.log("New Pattern:", pattern);
+        }
+
+        function playStep() {
+            const step = pattern[stepIndex];
+            if (step) {
+                tb.note_on(step.note, { accent: step.accent, slide: step.slide });
+            } else {
+                tb.note_off();
+            }
+            stepIndex = (stepIndex + 1) % pattern.length;
+        }
+
+        function start() {
+            if (intervalID) return;
+            ctx.resume();
+            stepIndex = 0;
+            intervalID = setInterval(playStep, STEP_TIME * 1000);
+        }
+
+        function stop() {
+            clearInterval(intervalID);
+            intervalID = null;
+            tb.note_off();
+        }
+
+        function bindSliderWithNumber(sliderId, numberId, callback) {
+            const slider = document.getElementById(sliderId);
+            const number = document.getElementById(numberId);
+
+            slider.oninput = e => {
+                number.value = e.target.value;
+                callback(parseFloat(e.target.value));
+            };
+
+            number.oninput = e => {
+                slider.value = e.target.value;
+                callback(parseFloat(e.target.value));
+            };
+        }
+
+        bindSliderWithNumber("tune", "tuneNum", v => tb.tune = v);
+        bindSliderWithNumber("attack", "attackNum", v => tb.attack = v);
+        bindSliderWithNumber("cutoff", "cutoffNum", v => tb.cutoff = v);
+        bindSliderWithNumber("resonance", "resonanceNum", v => tb.resonance = v);
+        bindSliderWithNumber("envMod", "envModNum", v => tb.envMod = v);
+        bindSliderWithNumber("decay", "decayNum", v => tb.decay = v);
+        bindSliderWithNumber("accent", "accentNum", v => tb.accentAmount = v);
+
+        document.querySelectorAll("input[name='wave']").forEach(radio => {
+            radio.onchange = e => {
+                tb.waveform = e.target.value;
+                tb.osc.type = tb.waveform;
+            };
+        });
+
+        document.getElementById("startBtn").onclick = start;
+        document.getElementById("stopBtn").onclick = stop;
+        document.getElementById("randomBtn").onclick = randomize;
+
+        randomize();
+    </script>
+
+</body>
+
+</html>
